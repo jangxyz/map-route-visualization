@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<!--[if IE 9]><html class="lt-ie10" lang="en" > <![endif]-->
+<html class="no-js" lang="kr" >
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"> 
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
+
+    <script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
+    <script type="text/javascript" src="http://d3js.org/topojson.v1.min.js"></script>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.6/moment.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.6/locale/ko.js"></script>
+    
+    <script type="text/javascript" src="http://openapi.map.naver.com/openapi/naverMap.naver?ver=2.0&key=79f8af505851e4deec06698e4db7ad32"></script>
+
+    <script type="text/javascript" src="/libs/jquery.event.drag-2.2/jquery.event.drag-2.2.js"></script>
+    <script type="text/javascript" src="/libs/referrer-killer.js"></script>
+    
+    <title>2015년 더탑 2회 불수사도북</title>
+
+    <script type="text/javascript" src="map.js"></script>
+    <script type="text/javascript" src="data1.js"></script>
+    <script type="text/javascript" src="data2.js"></script>
+    <script type="text/javascript" src="exif_data.js"></script>
+    <script type="text/javascript" src="content_data.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="libs/Semantic-UI-CSS/semantic.min.css">
+    <script src="libs/Semantic-UI-CSS/semantic.js"></script>
+
+<style>
+html, body { 
+    margin: 0; 
+    padding: 0;
+}
+body {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+</style>
+
+<script type="text/javascript">
+    var oMap;
+    $(function() {
+        var $mapContainer = $('#map-container');
+        var options = {
+            width : $mapContainer.width(),
+            height: $mapContainer.height(),
+        };
+
+        // data
+        var segments = data1[0]['segments'].concat(data2[0]['segments']);
+
+        function filterObjByTime(obj) {
+            return obj["startTime"] >= "20151120T213000+0900" &&
+                obj["endTime"]   <= "20151121T193000+0900";
+        }
+
+        var moveData = segments
+            .filter(function(obj) { return obj['type'] === 'move'; })
+            .filter(filterObjByTime)
+            .map(function(moveTypeObj) { return moveTypeObj['activities'][0]; })
+            .map(function(activityObj) { return activityObj['trackPoints'];   })
+            .reduce(function(a, b) { return a.concat(b); }, [])
+        ;
+
+        var placeData = segments
+            .filter(function(obj) { return obj['type'] === 'place'; })
+            .filter(filterObjByTime)
+            .map(function(placeTypeObj) { return placeTypeObj['place']['location']; })
+        ;
+
+        var exifDataArray = _.map(exifData, function(value, key) {
+            return [key, value];
+        });
+        var exifGPSData = _(exifDataArray)
+            .filter(function(keyValue) {
+                return _.get(keyValue[1], "tags.GPSLatitude");
+            })
+            .map(function(keyValue, i) {
+                var tags = keyValue[1]['tags'];
+                return {
+                    index: i,
+                    key  : keyValue[0],
+                    time: tags["ModifyDate"],
+                    lat: tags["GPSLatitude"],
+                    lon: tags["GPSLongitude"],
+                };
+            })
+            .value();
+
+        // map
+        var startPoint = moveData[0];
+        var _lats = moveData.map(function(obj) { return obj.lat; }),
+            _lons = moveData.map(function(obj) { return obj.lon; });
+        var startPoint = {
+            lat: (Math.min.apply(Math, _lats) + Math.max.apply(Math, _lats))/2,
+            lon: (Math.min.apply(Math, _lons) + Math.max.apply(Math, _lons))/2,
+        };
+        oMap = showNaverMap(startPoint, options);
+
+        // spots
+        renderSpotsPath(oMap, moveData, options);
+        renderSpotsCircle(oMap, placeData, _.assign({
+            radius: 70,
+            strokeColor: "rgb(31, 119, 180)",
+            fillColor  : "rgb(31, 119, 180)",
+            fillOpacity: 0.3,
+        }, options));
+
+        exifGPSData.forEach(function(obj) {
+            var icon = '<span class="photo-icon-wrapper" style=" "><i class="photo icon"></i></span>';
+            oMap.addOverlay(renderInfoWindow(obj, icon, options));
+        });
+
+        //renderSpotsRectWithData(oMap, exifGPSData, _.assign({
+        //    strokeColor: "rgb(254, 169, 0)",
+        //    fillColor  : "rgb(254, 169, 0)",
+        //    fillOpacity: 0.3,
+        //    mouseenter: function(el, obj) {
+        //        console.log(exifDataArray[obj['index']]);
+        //    },
+        //}, options));
+
+        // resize
+        $(window).on('resize', function() {
+            resizeMapContainer();
+        });
+    });
+</script>
+
+</head>
+<body>
+<style>
+
+#main-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+#main-content.has-right-sidebar {
+    right: 260px;
+}
+#map-container {
+    position: absolute;
+    width: 100%;
+    /*height: 100%;*/
+    top: 0;
+    bottom: 100px;
+}
+#player {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 100px;
+    background-color: #333;
+}
+.sidebar-wrapper {
+    position: absolute;
+    right: 0;
+    height: 100%;
+    min-height: 480px;
+    border-left: 1px solid black;
+    background-color: white;
+}
+#sidebar {
+    width: 260px;
+}
+    .sidebar-wrapper.is-closed #sidebar {
+        display: none;
+    }
+    .sidebar-wrapper.is-opened #sidebar {
+        display: block;
+    }
+.sidebar-button {
+    position: absolute; 
+    top: 44%; 
+}
+    .sidebar-button button.ui.button {
+        border: 1px solid #aaa;
+    }
+    .sidebar-button button.ui.compact.button {
+        padding-left: 0;
+    }
+    .sidebar-wrapper.is-closed .sidebar-button {
+        left: -20px;
+    }
+    .sidebar-wrapper.is-opened .sidebar-button {
+        left: -10px;
+    }
+    .sidebar-wrapper.is-closed .sidebar-button i.icon:before {
+        content: "\f100";
+    }
+    .sidebar-wrapper.is-opened .sidebar-button i.icon {
+        content: "\f101";
+    }
+
+.photo-icon-wrapper {
+    text-align: center;
+    border: 1px solid white;
+    color: #999;
+    border-radius: 4px;
+    background-color: rgba(245, 245, 245, 1.0);
+    padding-left: 3px;
+    padding-top: 1px;
+}
+
+#player button {
+    padding: 0;
+    border: none;
+    background-color: transparent;
+}
+#player button i {
+    font-size: 48px; 
+    margin: 0;
+    vertical-align: top;
+    line-height: 48px;
+}
+#player button i {
+    color: white;
+}
+#player button:hover i {
+    color: #CACBCD;
+}
+#player button:active i {
+    color: #BABBBC;
+}
+</style>
+
+<div id="main-content" class="has-right-sidebar">
+    <div id="map-container" style="background-image: url(./images/map-screenshot.png);">네이버 지도</div>
+    <div id="player">
+        <div style="display: inline-block;">
+            <button class="ui circular icon button"><i class="video play outline icon" style=""></i></button>
+        </div>
+
+        <div style="display: inline-block;">
+            <button class="ui circular icon button" onclick="showPrevPoint()"><i class="chevron circle left icon"></i></button>
+            <button class="ui circular icon button" onclick="showNextPoint()"><i class="chevron circle right icon"></i></button>
+        </div>
+
+
+        <div class="ui-list-wrapper scroll-wrapper" style="position: absolute; top: 15px; left: 156px; right: 10px; bottom: 0; overflow-x: auto;">
+            <div class="liner" style="position: absolute; display: inline-block; width: 3000px; background-color: white; height: 5px; border-radius: 5px; margin-top: 3px;"></div>
+            <div class="ui horizontal list" style="display: block; width: 3000px; padding-left: 30px; ">
+            <a href="#들머리" class="tick item" style="">
+                <div class="content">
+                    <i class="circle icon"></i>
+                    <div class="header">들머리</div>
+                    <div class="meta">2015/11/20 22:00</div>
+                </div>
+            </a>
+
+            <div class="ui top attached progress" data-percent="74">
+                <div class="bar"></div>
+            </div>
+            <p>La la la la</p>
+            <div class="ui bottom attached progress">
+                <div class="bar"></div>
+            </div>
+            </div>
+        </div>
+        <style>
+        #player .tick.item {
+            margin-top: -5px;
+            position: relative;
+        }
+        #player .tick.item i.circle.icon {
+            color: rgb(31, 119, 180);
+        }
+        #player .tick.item .positioner {
+            margin-left: 16px;
+            margin-top: -32px;
+            transform: rotate(90deg) translate(40px);
+        }
+        #player .tick.item .header {
+            position: absolute;
+            white-space: pre;
+            font-size: 0.8rem;
+            color: white;
+            font-weight: normal;
+        }
+        #player .tick.item .meta {
+            position: absolute;
+            top: 10px;
+            margin: 0;
+            white-space: pre;
+            font-weight: 400;
+            font-size: .6em;
+            color: rgba(255,255,255,0.4);
+        }
+        #player .tick.active.item .circle-wrapper {
+            border: 2px solid orange;
+            background-color: rgba(250,146,0, 0.8);
+            border-radius: 50%;
+            width: 20px;
+        }
+        </style>
+        <script>
+            $(function() {
+                var $list = $('#player .ui.list');
+                var $items = _.map(contentData, function(mountainObj, mountainName) {
+                    var $mountain = $('<div class="item title accordion-title" />').css({'padding-bottom': '0'}).append([
+                        $('<i class="folder icon"></i>'),
+                        $('<div class="content">').css({}).append([
+                            $('<div class="header" />').text(mountainName.replace(/-/g, ' ')).css({'display': 'inline-block'}),
+                            $('<div class="description" />').hide(),
+                            $('<div class="ui circular small horizontal label" />)').text(_.size(mountainObj)).css({'margin-left': '1em'}),
+                        ])
+                    ]);
+
+                    var $points = _.map(mountainObj, function(pointObj, pointId) {
+                        if (typeof pointObj !== 'object') { return; }
+                        return $('<a href="" class="tick item" />').attr('href', '#' + pointObj.id).on('click', handlePointLinkClick).append([
+                                $('<div class="content"></div>').append([
+                                    $('<div class="circle-wrapper"><i class="circle icon"></i></div>').css({}),
+                                    $('<div class="positioner" />').css({}).append([
+                                        $('<div class="header" />').text(pointObj.title).css({}),
+                                        $('<div class="meta" />').text(pointObj.time ? moment(pointObj.time, "YYYY/MM/DD HH:mm").format('HH:mm') : '').css({})
+                                    ])
+                                ]),
+                        ]);
+                    });
+                    return $points;
+                });
+                $items = _.flatten($items);
+                $list.empty().append($items);
+
+                // update width
+                var $firstItem = $list.find('.item:first'),
+                    $lastItem  = $list.find('.item:last');
+                var newWidth = $lastItem.position().left - $firstItem.position().left;
+                $list.css('width', newWidth + 100);
+                $list.prev('.liner').css('width', newWidth + 100);
+            });
+        </script>
+    </div>
+</div>
+
+<div class="sidebar-wrapper is-opened">
+    <div id="sidebar" class="ui right visible">
+        <div class="ui top attached tabular menu" style="margin-top: 5px;">
+            <a class="item active" data-tab="mountaineering-items-tab">산행</a>
+            <a class="item" data-tab="content-tab">내용</a>
+            <a class="item" data-tab="style-tab">스타일</a>
+        </div>
+
+        <div class="ui bottom attached segment tab-content-container" style="overflow-y: hidden; position: absolute; top: 47px; bottom: 0; left:0; right: 0; padding: 0;">
+            <div class="ui tab segment active" data-tab="mountaineering-items-tab" style="height: 100%;">
+                <div class="scroll-wrapper" style="height: 100%; overflow-y: auto;">
+                    <div class="ui list accordion">
+                    </div>
+                </div>
+            </div>
+            <style>
+                #sidebar [data-tab="mountaineering-items-tab"] .item .content {
+                }
+                #sidebar [data-tab="mountaineering-items-tab"] .item .header {
+                }
+                #sidebar [data-tab="mountaineering-items-tab"] .item .description {
+                    margin: 0;
+                    font-weight: 400;
+                    font-size: .6em;
+                    color: rgba(0,0,0,.4);
+                }
+            </style>
+            <script>
+                $(function() {
+                    var $list = $('#sidebar [data-tab="mountaineering-items-tab"] .ui.list');
+                    var $items = _.map(contentData, function(mountainObj, mountainName) {
+                        var $mountain = $('<div class="item title accordion-title" />').css({'padding-bottom': '0'}).append([
+                            $('<i class="folder icon"></i>'),
+                            $('<div class="content">').css({}).append([
+                                $('<div class="header" />').text(mountainName.replace(/-/g, ' ')).css({'display': 'inline-block'}),
+                                $('<div class="description" />').hide(),
+                                $('<div class="ui circular small horizontal label" />)').text(_.size(mountainObj)).css({'margin-left': '1em'}),
+                            ])
+                        ]);
+
+                        var $points = _.map(mountainObj, function(pointObj, pointId) {
+                            if (typeof pointObj !== 'object') {
+                                return;
+                            }
+                            return $('<a href="" class="item"></div>').attr('href', '#' + pointObj.id).on('click', handlePointLinkClick).append([
+                                $('<i class="file icon"></i>'),
+                                $('<div class="content"></div>').append([
+                                    $('<div class="header left floated" />').text(pointObj.title).css({}),
+                                    $('<div class="description right floated" />').text(pointObj.time||'').css({})
+                                ]),
+                            ]);
+                        });
+
+                        var $pointList = $('<div class="item content accordion-content" />').css({'padding-top': '0'}).append(
+                            $('<div class="content">').append([
+                                $('<div class="list ">').append($points)
+                            ]).css({'margin-left': '16px'})
+                        );
+
+                        return [$mountain, $pointList];
+                    });
+                    $items = _.flatten($items);
+                    $list.append($items);
+
+                    $list.find('.title:first,.accordion-content:first').addClass('active');
+                    $('.ui.accordion').accordion({
+                        exclusive: false,
+                        selector: {
+                            'title': '.accordion-title',
+                            'trigger': '.accordion-title',
+                            'content': '.accordion-content',
+                        },
+                    });
+                });
+            </script>
+
+            <div class="ui tab segment" data-tab="content-tab" style="height: 100%;">
+                <div class="scroll-wrapper" style="height: 100%; overflow-y: auto;">
+                <div id="sidebar-content-tab" class="ui card">
+                    <div class="content">
+                        <div class="id" style="display: none;">불암산-상계역</div>
+                        <div class="header">수락산 정상</div>
+                        <div class="meta" style="font-size: 0.8rem;">
+                            <div class="datetime right aligned">2015/11/21 0:57</div>
+                            <div class="since-start right aligned">산행 3시간째</div>
+                        </div>
+                    </div>
+
+                    <div class="image">
+                        <img src="./images/thumbnails/512/IMG_6074.jpg.thumbnail-512.jpg" >
+                    </div>
+
+                    <div class="content">
+                        <div class="description">
+                            <p>
+                                2시간 전에 불암산 정상에 있을 때는 그나마 사진을 찍더니, 이제는 신경쓰지 않습니다.
+                                산행 시작한지 3시간이 다 되어가 배가 고픕니다. 주섬주섬 간단한 간식들을 꺼내 먹습니다.
+                            </p>
+                             
+                            <p>
+                                이때 뒷그룹은 치마바위 부근이라고 합니다.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="scroll-wrapper" style="width: 100%; overflow-x: scroll;">
+                        <ul class="ui tiny images horizontal list" style="width: 3000px; margin-left: 0; list-style-type: none;">
+                            <li class="item">
+                                <a>
+                                    <img class="ui rounded image" src="./images/thumbnails/256/IMG_6074.jpg.thumbnail-256.jpg"></a></li>
+                            <li class="item">
+                                <a>
+                                    <img class="ui rounded image" src="./images/thumbnails/256/IMG_0405.jpg.thumbnail-256.jpg"></a></li>
+                            <li class="item">
+                                <a>
+                                    <img class="ui rounded image" src="./images/thumbnails/256/IMG_0406.jpg.thumbnail-256.jpg"></a></li>
+                        </ul>
+                    </div>
+                </div>
+                </div>
+            </div>
+            <div class="ui tab segment" data-tab="style-tab">
+                Third
+            </div>
+        </div>
+        <script>
+            $('#sidebar .tabular.menu .item').tab();
+        </script>
+        <style>
+            #sidebar-content-tab .ul.images li {
+                margin-left: 0;
+            }
+            #sidebar-content-tab .ul.images li a {
+                display: inline-block;
+            }
+        </style>
+    </div>
+    <div class="sidebar-button positioner">
+        <button class="ui tiny compact icon button" onclick="toggleSidebar()">
+            <i class="angle double right icon" class="margin: 0;"></i>
+        </button>
+    </div>
+</div>
+
+
+
+<script>
+function toggleSidebar() {
+    if (isSidebarOpen()) {
+        closeSidebar();
+    } else {
+        openSidebar();
+    }
+}
+function closeSidebar() {
+    $('#main-content').removeClass('has-right-sidebar');
+    $('.sidebar-wrapper').removeClass('is-opened').addClass('is-closed');
+    resizeMapContainer();
+}
+function openSidebar() {
+    $('#main-content').addClass('has-right-sidebar');
+    $('.sidebar-wrapper').removeClass('is-closed').addClass('is-opened');
+    resizeMapContainer();
+}
+function isSidebarOpen() {
+    return $('#main-content').hasClass('has-right-sidebar');
+}
+
+function resizeMapContainer() {
+    var $mapContainer = $('#map-container');
+    var oSize = new nhn.api.map.Size($mapContainer.parent().width(), $mapContainer.height());
+    oMap.setSize(oSize);
+}
+
+function showPrevPoint() {
+    var pointId = getCurrentPointId() || '불암산-상계역';
+    var nextPointId = getPrevPointId(pointId);
+    showContent(nextPointId);
+}
+function showNextPoint() {
+    var pointId = getCurrentPointId() || '불암산-상계역';
+    var nextPointId = getNextPointId(pointId);
+    showContent(nextPointId);
+}
+
+function iframifyImage($img) {
+    //var img = $($img)[0];
+    //var iframeHtmlHead = '<!doctype html><html><head></head><body>';
+    //var iframeHtmlTail = '</body></html>';
+    //var $iframeImg = $('<iframe />').attr('src', 'javascript:' + JSON.stringify(iframeHtmlHead) 
+    //                                      + ' + ' + JSON.stringify('decodeURIComponent(' + encodeURIComponent(img.outerHTML) + ')')
+    //                                      + ' + ' + JSON.stringify(iframeHtmlTail));
+    //return $iframeImg;
+    try {
+        return ReferrerKiller.imageHtml($($img).attr('src'));
+    } catch(e) {
+        return $img[0];
+    }
+}
+
+function fillContentTab(pointObj) {
+    var $el = $('#sidebar-content-tab');
+    $el.find('.id').text(pointObj.id);
+    $el.find('.header').text(pointObj.title);
+
+    $el.find('.datetime').empty();
+    $el.find('.since-start').empty();
+    if (pointObj.time) {
+        $el.find('.datetime').text(pointObj.time);
+        var currentAt = moment(pointObj.time, "YYYY/MM/DD HH:mm");
+        var startedAt = moment(contentData["불암산-수락산-구간"]["불암산-들머리"].time, "YYYY/MM/DD HH:mm");
+        var since = currentAt - startedAt;
+        if (since > 0) {
+            since = moment.duration(since);
+            var sinceStr = '';
+            if (since.hours()) {
+                sinceStr += since.hours() + '시간';
+            }
+            if (since.minutes()) {
+                sinceStr += ' ' + since.minutes() + '분';
+            }
+            $el.find('.since-start').text('산행 ' + sinceStr + '째');
+        }
+    }
+
+    $el.find('.image').empty()
+    if ((pointObj.figures||[])[0]) {
+        var $img = $('<img />').attr('src', pointObj.figures[0].src);
+        var iframedImg = iframifyImage($img);
+        $el.find('.image')[0].innerHTML = iframedImg;
+    }
+
+    var description = pointObj.description.trim().split('\n').map(function(p) {
+        return $('<p/>').text(p);
+    });
+    $el.find('.description').empty().append(description);
+
+    var $figureLis = (pointObj.figures||[]).map(function(figureObj) {
+        var $img = $('<img />').attr({
+            src: figureObj.src,
+            'actualwidth': figureObj.actualwidth,
+            'width': figureObj.width,
+            'style': figureObj.style,
+        });
+
+        return $('<li class="item">').append(
+            $('<a />').append(iframifyImage($img))
+        );
+    });
+    //$el.find('ul.images').empty().append($figureLis);
+}
+
+function getCurrentPointId() {
+    var $el = $('#sidebar-content-tab');
+    return $el.find('.id').text();
+}
+
+function getPointObj(pointId) {
+    var mountainObj = _.find(contentData, function(mountainObj, mountainId) {
+        var pointObj = _.find(mountainObj, function(pointObj, _pointId) {
+            return _pointId === pointId;
+        });
+        return pointObj;
+    });
+    var pointObj = mountainObj[pointId];
+
+    pointObj['__mountain_index'] = mountainObj.index;
+    return pointObj;
+}
+
+
+function getPrevMountainObj(mountainObj) {
+    return getMountainObjWithIndex(mountainObj.index-1);
+}
+function getNextMountainObj(mountainObj) {
+    return getMountainObjWithIndex(mountainObj.index+1);
+}
+function getMountainObjWithIndex(index) {
+    return _.find(contentData, function(_mountainObj, mountainId) {
+        return _mountainObj.index === index;
+    });
+}
+
+
+function getPointObjWithIndex(mountainObj, index) {
+    return _.find(mountainObj, function(_pointObj, _pointId) {
+        return _pointObj.index === index;
+    });
+}
+function getPrevPointObj(pointObj) {
+    var mountainObj = getMountainObjWithIndex(pointObj.__mountain_index);
+    var pointObj = getPointObjWithIndex(mountainObj, pointObj.index - 1);
+
+    if (!pointObj) {
+        var prevMountainObj = getPrevMountainObj(mountainObj);
+        prevMountainObj = prevMountainObj || getMountainObjWithIndex(_.size(contentData) -1);
+        pointObj = getPointObjWithIndex(prevMountainObj, _.size(prevMountainObj)-3);
+    }
+
+    //
+    pointObj['__mountain_index'] = mountainObj.index;
+    return pointObj;
+}
+function getNextPointObj(pointObj) {
+    var mountainObj = getMountainObjWithIndex(pointObj.__mountain_index);
+    var pointObj = getPointObjWithIndex(mountainObj, pointObj.index + 1);
+
+    if (!pointObj) {
+        var nextMountainObj = getNextMountainObj(mountainObj);
+        nextMountainObj = nextMountainObj || getMountainObjWithIndex(0);
+        pointObj = getPointObjWithIndex(nextMountainObj, 0);
+    }
+
+    pointObj['__mountain_index'] = mountainObj.index;
+    return pointObj;
+}
+function getPrevPointId(pointId) {
+    var pointObj = getPointObj(pointId);
+    var prevPointObj = getPrevPointObj(pointObj);
+    return prevPointObj.id;
+}
+function getNextPointId(pointId) {
+    var pointObj = getPointObj(pointId);
+    var nextPointObj = getNextPointObj(pointObj);
+    return nextPointObj.id;
+}
+
+function showContent(pointId) {
+    var pointObj = getPointObj(pointId);
+    fillContentTab(pointObj);
+
+    // tab
+    //$('#sidebar .tabular.menu .item[data-tab="content-tab"]').tab();
+    $.tab('change tab', 'content-tab');
+    $('#sidebar .tabular.menu .item').removeClass('active')
+        .filter('[data-tab="content-tab"]').addClass('active');
+
+    // liner
+    var $tick = $('#player a.tick.item').removeClass('active')
+        .filter('[href="#' + pointId + '"]').addClass('active');
+    var left = $tick.position().left - $tick.parent().position().left;
+    var $scroller = $tick.parents('.scroll-wrapper:first');
+    $scroller.animate({
+        scrollLeft: left/2
+    });
+}
+
+function handlePointLinkClick() {
+    var pointId = $(this).attr('href').replace(/^#/, '');
+    showContent(pointId);
+}
+
+</script>
+
+
+</body>
+</html>
+
