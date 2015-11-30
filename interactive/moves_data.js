@@ -6298,4 +6298,4 @@ var movesData = [{
   "lastUpdate": "20151123T014126Z",
   "date": "20151121",
   "caloriesIdle": 1464
-}]
+}];

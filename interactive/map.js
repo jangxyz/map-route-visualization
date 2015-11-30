@@ -220,28 +220,106 @@ function renderSpotsD3(map, data, options) {
     }
 }
 
-function renderSpotsCircle(oMap, data, options) {
-    var level = oMap.getLevel();
-
-    var radius = options.radius || 70;
-
+function renderSpotsCircleWithData(oMap, data, options) {
     // draw circles
     data.forEach(function(obj) {
-        var oPoint = new nhn.api.map.LatLng(obj.lat, obj.lon);
-        var circle = new nhn.api.map.Circle({
-            strokeColor  : options.strokeColor || "rgb(31, 119, 180)", // - 선의 색깔을 지정함.
-            strokeOpacity: 1, // - 선의 투명도를 지정함.
-            strokeWidth  : 1, // - 선의 두께를 지정함.
-            fillColor    : options.fillColor || "rgb(31, 119, 180)",
-            fillOpacity  : options.fillOpacity || 0.3, // - 채우기 색상. none 이면 투명하게 된다.
-            radius: radius, // meter
-        });
+        var circle = renderSpotsCircle(oMap, obj, options);
+    });
+}
 
-        circle.setCenterPoint(oPoint); // - circle 의 중심점을 지정한다.
-        oMap.addOverlay(circle);
+var locationToCircleHash = {};
+var defaultCircleOption = {
+    strokeColor  : "rgb(31, 119, 180)", // - 선의 색깔을 지정함.
+    strokeOpacity: 1, // - 선의 투명도를 지정함.
+    strokeWidth  : 1, // - 선의 두께를 지정함.
+    fillColor    : "rgb(31, 119, 180)",
+    fillOpacity  : 0.3, // - 채우기 색상. none 이면 투명하게 된다.
+    radius: 70, // meter
+};
+function renderSpotsCircle(oMap, obj, options) {
+    var oPoint = new nhn.api.map.LatLng(obj.lat, obj.lon);
+
+    defaultCircleOption = _.assign(defaultCircleOption, {
+        options
+    });
+    var radius = options.radius;
+
+    var circle = new nhn.api.map.Circle(defaultCircleOption);
+    circle.setCenterPoint(oPoint); // - circle 의 중심점을 지정한다.
+    $(circle.wrap).addClass('circle');
+
+    //
+    circle.attach('mouseenter', function(oCustomEvent) {
+        highlightMouseOverCircle(circle)
+    });
+    circle.attach('mouseleave', function(oCustomEvent) {
+        unhighlightMouseOverCircle(circle);
+    });
+    circle.attach('click', function(oCustomEvent) {
+        showContentByLocationObj(obj);
     });
 
+    //
+    oMap.addOverlay(circle);
+
+    //
+    var keyObj = {lat: obj.lat, lon: obj.lon};
+    locationToCircleHash[JSON.stringify(keyObj)] = circle;
+
+    return circle;
 }
+
+function highlightMouseOverCircle(circle) {
+    if ($(circle.wrap).hasClass('is-current')) {
+        return;
+    }
+    circle.setStyle({
+        strokeWidth: 1,
+        strokeColor: "rgb(31, 119, 180)",
+        fillColor  : "rgb(31, 119, 180)",
+        fillOpacity: 0.6,
+    });
+    circle.setRadius(defaultCircleOption.radius + 7);
+}
+function unhighlightMouseOverCircle(circle) {
+    if ($(circle.wrap).hasClass('is-current')) {
+        return;
+    }
+    revertCircleStyle(circle);
+}
+function revertAllCircleStyles() {
+    _.each(locationToCircleHash, function(circle) {
+        revertCircleStyle(circle);
+    });
+}
+function revertCircleStyle(circle) {
+    circle.setStyle(defaultCircleOption);
+    circle.setRadius(defaultCircleOption.radius);
+    $(circle.wrap).removeClass('is-current');
+}
+
+
+function highlightCurrentCircleFromLocation(location) {
+    var circle = getCircleObj(location);
+    if (!circle) {
+        return;
+    }
+
+    circle.setStyle({
+        strokeWidth: 3,
+        strokeColor: "rgb(250,146,0)",
+        //fillColor  : "rgb(250,146,0)",
+        //fillOpacity: 0.6,
+    });
+    circle.setRadius(defaultCircleOption.radius + 15);
+    $(circle.wrap).addClass('is-current');
+}
+
+function getCircleObj(location) {
+    var keyObj = {lat: location.lat, lon: location.lon};
+    return locationToCircleHash[JSON.stringify(keyObj)];
+}
+
 
 function renderSpotsRectWithData(oMap, data, options) {
     var level = oMap.getLevel();
@@ -258,12 +336,20 @@ function renderInfoWindow(obj, html, options) {
 
     infoWin.setPoint(new nhn.api.map.LatLng(obj.lat, obj.lon));
     infoWin.setPosition({
-        right: 15, 
-        top  : 30,
+        right: 5, 
+        top  : 5,
     });
     infoWin.autoPosition();
 
     infoWin.setVisible(true);
+
+    // event
+    $(infoWin.getElement()).on('mouseenter', function(ev) {
+        if (options.mouseenter) {
+            options.mouseenter(this, obj);
+        }
+    });
+
     return infoWin;
 }
 
@@ -335,7 +421,7 @@ function renderSpotsRect(oMap, obj, options) {
 }
 
 
-function renderSpotsPath(oMap, data, options) {
+function renderSpotsPathWithData(oMap, data, options) {
     var colors = d3.scale.category10();
 
     var radius      = 5;
@@ -343,7 +429,6 @@ function renderSpotsPath(oMap, data, options) {
         plusPadding = 1;
 
     // draw polyline
-
     var points = data.map(function(obj) {
         return new nhn.api.map.LatLng(obj.lat, obj.lon);
     });
@@ -357,7 +442,6 @@ function renderSpotsPath(oMap, data, options) {
         //radius: 20, // meter
     });
     oMap.addOverlay(polyline);
-
 }
 
 

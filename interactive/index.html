@@ -41,8 +41,16 @@ body {
 }
 </style>
 
+<style>
+.nmap_drawing_pane .circle {
+    cursor: pointer;
+}
+
+</style>
+
 <script type="text/javascript">
     var oMap;
+    var locationToPointObjHash = {};
     $(function() {
         var $mapContainer = $('#map-container');
         var options = {
@@ -51,7 +59,9 @@ body {
         };
 
         // data
-        var segments = _(movesData).map(function(dailyData) { 
+
+        // Moves App data
+        var _segments = _(movesData).map(function(dailyData) { 
             return dailyData['segments']; 
         }).flatten().value();
 
@@ -60,7 +70,7 @@ body {
                 obj["endTime"]   <= "20151121T193000+0900";
         }
 
-        var moveData = segments
+        var moveData = _segments
             .filter(function(obj) { return obj['type'] === 'move'; })
             .filter(filterObjByTime)
             .map(function(moveTypeObj) { return moveTypeObj['activities'][0]; })
@@ -68,12 +78,18 @@ body {
             .reduce(function(a, b) { return a.concat(b); }, [])
         ;
 
-        var placeData = segments
+        var placeData = _segments
             .filter(function(obj) { return obj['type'] === 'place'; })
             .filter(filterObjByTime)
-            .map(function(placeTypeObj) { return placeTypeObj['place']['location']; })
+            .map(function(placeTypeObj) { 
+                var location = placeTypeObj['place']['location'];
+                location['startTime'] = placeTypeObj['startTime'];
+                location['endTime']   = placeTypeObj['endTime'];
+                return location; 
+            })
         ;
 
+        // exif data
         var exifDataArray = _.map(exifData, function(value, key) {
             return [key, value];
         });
@@ -93,28 +109,51 @@ body {
             })
             .value();
 
+        // Content Data
+        _.each(contentData, function(mountainObj, mountainId) {
+            _.each(mountainObj, function(pointObj, pointKey) {
+                if (!_.isObject(pointObj)) {
+                    return;
+                }
+                _.each(pointObj['locations'], function(locationObj) {
+                    var keyObj = { lat: locationObj['lat'], lon: locationObj['lon'] };
+                    locationToPointObjHash[JSON.stringify(keyObj)] = pointObj;
+                });
+            });
+        });
+
         // map
-        var startPoint = moveData[0];
+        //var startPoint = moveData[0];
         var _lats = moveData.map(function(obj) { return obj.lat; }),
             _lons = moveData.map(function(obj) { return obj.lon; });
-        var startPoint = {
+        var mapCenterPoint = {
             lat: (Math.min.apply(Math, _lats) + Math.max.apply(Math, _lats))/2,
             lon: (Math.min.apply(Math, _lons) + Math.max.apply(Math, _lons))/2,
         };
-        oMap = showNaverMap(startPoint, options);
+        oMap = showNaverMap(mapCenterPoint, options);
 
-        // spots
-        renderSpotsPath(oMap, moveData, options);
-        renderSpotsCircle(oMap, placeData, _.assign({
+        // render path for activity
+        renderSpotsPathWithData(oMap, moveData, options);
+        // render circles for places
+        var circleOptions = {
             radius: 70,
             strokeColor: "rgb(31, 119, 180)",
             fillColor  : "rgb(31, 119, 180)",
             fillOpacity: 0.3,
-        }, options));
+        };
+        placeData.forEach(function(obj) {
+            var circle = renderSpotsCircle(oMap, obj, _.assign({}, options, circleOptions));
+        });
+        renderSpotsCircle(oMap, moveData[0], _.assign({}, options, circleOptions));
 
+        // photos
         exifGPSData.forEach(function(obj) {
             var icon = '<span class="photo-icon-wrapper" style=" "><i class="photo icon"></i></span>';
-            oMap.addOverlay(renderInfoWindow(obj, icon, options));
+            oMap.addOverlay(renderInfoWindow(obj, icon, _.assign({}, options, {
+                mouseenter: function(el, obj) {
+                    console.log(obj, el);
+                },
+            })));
         });
 
         //renderSpotsRectWithData(oMap, exifGPSData, _.assign({
@@ -236,9 +275,11 @@ body {
 <div id="main-content" class="has-right-sidebar">
     <div id="map-container" style="background-image: url(./images/map-screenshot.png);">네이버 지도</div>
     <div id="player">
+        <!--
         <div style="display: inline-block;">
             <button class="ui circular icon button"><i class="video play outline icon" style=""></i></button>
         </div>
+        -->
 
         <div style="display: inline-block;">
             <button class="ui circular icon button" onclick="showPrevPoint()"><i class="chevron circle left icon"></i></button>
@@ -304,6 +345,7 @@ body {
         </style>
         <script>
             $(function() {
+                // render player
                 var $list = $('#player .ui.list');
                 var $items = _.map(contentData, function(mountainObj, mountainName) {
                     var $mountain = $('<div class="item title accordion-title" />').css({'padding-bottom': '0'}).append([
@@ -359,6 +401,13 @@ body {
                 </div>
             </div>
             <style>
+                #sidebar [data-tab="mountaineering-items-tab"] .point-item {
+                    padding: 5px 10px;
+                    margin-left: -3px;
+                    margin-right: 3px;
+                    font-size: 0.9rem;
+                }
+
                 #sidebar [data-tab="mountaineering-items-tab"] .item .content {
                 }
                 #sidebar [data-tab="mountaineering-items-tab"] .item .header {
@@ -369,9 +418,19 @@ body {
                     font-size: .6em;
                     color: rgba(0,0,0,.4);
                 }
+
+                #sidebar [data-tab="mountaineering-items-tab"] .item.is-current {
+                    box-shadow: 0px 0px 5px 2px orange;
+                    border-radius: 5px;
+                }
+                    #sidebar [data-tab="mountaineering-items-tab"] .item.is-current i.icon {
+                        color: rgba(0,0,0,.87);
+                    }
+
             </style>
             <script>
                 $(function() {
+                    // render toc
                     var $list = $('#sidebar [data-tab="mountaineering-items-tab"] .ui.list');
                     var $items = _.map(contentData, function(mountainObj, mountainName) {
                         var $mountain = $('<div class="item title accordion-title" />').css({'padding-bottom': '0'}).append([
@@ -387,7 +446,7 @@ body {
                             if (typeof pointObj !== 'object') {
                                 return;
                             }
-                            return $('<a href="" class="item"></div>').attr('href', '#' + pointObj.id).on('click', handlePointLinkClick).append([
+                            return $('<a href="" class="item point-item"></div>').attr('href', '#' + pointObj.id).on('click', handlePointLinkClick).append([
                                 $('<i class="file icon"></i>'),
                                 $('<div class="content"></div>').append([
                                     $('<div class="header left floated" />').text(pointObj.title).css({}),
@@ -701,12 +760,39 @@ function getNextPointId(pointId) {
     return nextPointObj.id;
 }
 
-function highlightContentTab(pointObj) {
+function openAccordionForPoint(pointObj) {
+    var $list = $('#sidebar [data-tab="mountaineering-items-tab"] .ui.accordion');
+
+    var targetIndex = pointObj.__mountain_index;
+    _.each(contentData, function(mountainObj, mountainId) {
+        var behavior = 'close';
+
+        if (mountainObj.index === targetIndex) {
+            behavior = 'open';
+        } else {
+        }
+        $list.accordion(behavior, mountainObj.index);
+    });
+
+    $list
+        .find('.list .item').removeClass('is-current')
+        .filter('[href="#' + pointObj.id + '"]').addClass('is-current');
+}
+
+function highlightSidebar(pointObj) {
+    // toc tab
+    openAccordionForPoint(pointObj);
+
+    // content tab
     fillContentTab(pointObj);
+
     //$('#sidebar .tabular.menu .item[data-tab="content-tab"]').tab();
     $.tab('change tab', 'content-tab');
     $('#sidebar .tabular.menu .item').removeClass('active')
         .filter('[data-tab="content-tab"]').addClass('active');
+
+    // open sidebar
+    openSidebar();
 }
 function highlightPointOnLiner(pointId) {
     var $tick = $('#player a.tick.item').removeClass('active')
@@ -720,13 +806,39 @@ function highlightPointOnLiner(pointId) {
     });
 }
 function highlightPointOnMap(pointObj) {
+    var locations = pointObj['locations'];
+
+    revertAllCircleStyles();
+    _.each(locations, function(locationObj) {
+        highlightCurrentCircleFromLocation(locationObj);
+    });
+
+    // animate to position
+    if (locations.length > 0) {
+        var oPoint = new nhn.api.map.LatLng(locations[0].lat, locations[0].lon);
+        oMap.setCenter(oPoint);
+    }
+}
+
+function getPointObjByLocation(locationObj) {
+    var keyObj = {lat: locationObj.lat, lon: locationObj.lon};
+    return locationToPointObjHash[JSON.stringify(keyObj)];
+}
+
+function showContentByLocationObj(locationObj) {
+    var pointObj = getPointObjByLocation(locationObj);
+    if (!pointObj) {
+        console.warn('no point found for location:', locationObj);
+    }
+
+    showContent(pointObj.id);
 }
 
 function showContent(pointId) {
     var pointObj = getPointObj(pointId);
 
     // tab
-    highlightContentTab(pointObj);
+    highlightSidebar(pointObj);
 
     // highlight liner
     highlightPointOnLiner(pointId);
@@ -735,7 +847,7 @@ function showContent(pointId) {
     highlightPointOnMap(pointObj);
 }
 
-function handlePointLinkClick() {
+function handlePointLinkClick(ev) {
     var pointId = $(this).attr('href').replace(/^#/, '');
     showContent(pointId);
 }
