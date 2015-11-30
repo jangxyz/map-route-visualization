@@ -286,9 +286,8 @@ body {
             <button class="ui circular icon button" onclick="showNextPoint()"><i class="chevron circle right icon"></i></button>
         </div>
 
-
-        <div class="ui-list-wrapper scroll-wrapper" style="position: absolute; top: 15px; left: 156px; right: 10px; bottom: 0; overflow-x: auto;">
-            <div class="liner" style="position: absolute; display: inline-block; width: 3000px; background-color: white; height: 5px; border-radius: 5px; margin-top: 3px;"></div>
+        <div class="ui-list-wrapper scroll-wrapper">
+            <div class="liner" style="width: 3000px;"></div>
             <div class="ui horizontal list" style="display: block; width: 3000px; padding-left: 30px; ">
             <a href="#들머리" class="tick item" style="">
                 <div class="content">
@@ -308,6 +307,24 @@ body {
             </div>
         </div>
         <style>
+        #player .liner {
+            position: absolute;
+            display: inline-block;
+            width: auto;
+            background-color: white;
+            height: 5px;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+        #player .scroll-wrapper {
+            position: absolute;
+            top: 15px;
+            left: 156px;
+            right: 10px;
+            bottom: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
         #player .tick.item {
             margin-top: -5px;
             position: relative;
@@ -482,9 +499,9 @@ body {
                 <div class="scroll-wrapper" style="height: 100%; overflow-y: auto;">
                 <div id="sidebar-content-tab" class="ui card">
                     <div class="content">
-                        <div class="id" style="display: none;">불암산-상계역</div>
+                        <div class="id" style="display: none;"></div>
                         <div class="header">수락산 정상</div>
-                        <div class="meta" style="font-size: 0.8rem;">
+                        <div class="meta" style="font-size: 0.8rem; margin-top: -20px;">
                             <div class="datetime right aligned">2015/11/21 0:57</div>
                             <div class="since-start right aligned">산행 3시간째</div>
                         </div>
@@ -582,7 +599,7 @@ function showPrevPoint() {
     showContent(nextPointId);
 }
 function showNextPoint() {
-    var pointId = getCurrentPointId() || '불암산-상계역';
+    var pointId = getCurrentPointId() || '북한산-하산';
     var nextPointId = getNextPointId(pointId);
     showContent(nextPointId);
 }
@@ -610,6 +627,18 @@ function imageThumbnailSrc(imgSrc, size) {
 	var path = 'http://t1.daumcdn.net/thumb/' + sizePath;
 	path += '/?fname=' + encodeURIComponent(imgSrc);
 	return path;
+}
+
+function setContentMainImage(imgSrc, $_el) {
+    var $el = $_el || $('#sidebar-content-tab');
+
+    // 200x200
+    imgSrc = imageThumbnailSrc(imgSrc, 200);
+    var $img = $('<img />').attr('src', imgSrc).addClass('ui bordered rounded image');
+    //var iframedImg = iframifyImage($img);
+    //$el.find('.image')[0].innerHTML = iframedImg;
+
+    $el.find('.image').empty().append($img);
 }
 
 function fillContentTab(pointObj) {
@@ -640,12 +669,7 @@ function fillContentTab(pointObj) {
     $el.find('.image').empty()
     if ((pointObj.figures||[])[0]) {
 		var imgSrc = pointObj.figures[0].src;
-		// 200x200
-		imgSrc = imageThumbnailSrc(imgSrc, 200);
-        var $img = $('<img />').attr('src', imgSrc);
-        //var iframedImg = iframifyImage($img);
-        //$el.find('.image')[0].innerHTML = iframedImg;
-		$el.find('.image').append($img);
+        setContentMainImage(imgSrc, $el);
     }
 
     var description = pointObj.description.trim().split('\n').map(function(p) {
@@ -665,15 +689,34 @@ function fillContentTab(pointObj) {
 		//var thumbnailImg = iframifyImage($img);
 		var thumbnailImg = imageThumbnailSrc($img.attr('src'), 100);
         return $('<li class="item">').append(
-				$('<a />').append($('<img />').attr('src', thumbnailImg)).addClass('ui rounded bordered image')
+				$('<a />').on('click', function(ev) {
+                    ev.preventDefault();
+
+                    setContentMainImage(figureObj.src, $el);
+                })
+                .append(
+                    $('<img />').attr('src', thumbnailImg).addClass('ui rounded bordered image')
+                )
         );
     });
     var $imageList = $el.find('ul.images');
     $imageList.empty();
 
-    if ($figureLis > 1) {
+    if ($figureLis.length > 1) {
         $imageList.css('width', '3000px')
             .append($figureLis);
+
+        if ($imageList.is(':visible')) {
+            updateThumbnailListWidth($imageList);
+        } else {
+            setTimeout(function() {
+                updateThumbnailListWidth($imageList);
+            }, 300);
+        }
+    }
+
+    function updateThumbnailListWidth($imageList) {
+        $imageList = $imageList || $el.find('ul.images');
 
         // update width
         var newWidth = 0;
@@ -802,11 +845,11 @@ function highlightPointOnLiner(pointId) {
 
     // animate
     $scroller.animate({
-        scrollLeft: left/2
+        scrollLeft: left - $scroller.width() / 2
     });
 }
 function highlightPointOnMap(pointObj) {
-    var locations = pointObj['locations'];
+    var locations = pointObj['locations']||[];
 
     revertAllCircleStyles();
     _.each(locations, function(locationObj) {
