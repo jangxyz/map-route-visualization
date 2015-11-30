@@ -13,6 +13,7 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.6/moment.min.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.6/locale/ko.js"></script>
     
+    <script type="text/javascript" src="http://openapi.map.naver.com/openapi/naverMap.naver?ver=2.0&key=79f8af505851e4deec06698e4db7ad32"></script>
     <script type="text/javascript" src="http://openapi.map.naver.com/openapi/naverMap.naver?ver=2.0&key=b8563380873be54aaaa3531d34180f19"></script>
 
     <script type="text/javascript" src="libs/jquery.event.drag-2.2/jquery.event.drag-2.2.js"></script>
@@ -21,14 +22,12 @@
     <title>2015년 더탑 2회 불수사도북</title>
 
     <script type="text/javascript" src="map.js"></script>
-    <script type="text/javascript" src="data1.js"></script>
-    <script type="text/javascript" src="data2.js"></script>
+    <script type="text/javascript" src="moves_data.js"></script>
     <script type="text/javascript" src="exif_data.js"></script>
     <script type="text/javascript" src="content_data.js"></script>
 
     <link rel="stylesheet" type="text/css" href="libs/Semantic-UI-CSS/semantic.min.css">
     <script src="libs/Semantic-UI-CSS/semantic.js"></script>
-
 <style>
 html, body { 
     margin: 0; 
@@ -52,7 +51,9 @@ body {
         };
 
         // data
-        var segments = data1[0]['segments'].concat(data2[0]['segments']);
+        var segments = _(movesData).map(function(dailyData) { 
+            return dailyData['segments']; 
+        }).flatten().value();
 
         function filterObjByTime(obj) {
             return obj["startTime"] >= "20151120T213000+0900" &&
@@ -700,24 +701,38 @@ function getNextPointId(pointId) {
     return nextPointObj.id;
 }
 
-function showContent(pointId) {
-    var pointObj = getPointObj(pointId);
+function highlightContentTab(pointObj) {
     fillContentTab(pointObj);
-
-    // tab
     //$('#sidebar .tabular.menu .item[data-tab="content-tab"]').tab();
     $.tab('change tab', 'content-tab');
     $('#sidebar .tabular.menu .item').removeClass('active')
         .filter('[data-tab="content-tab"]').addClass('active');
-
-    // liner
+}
+function highlightPointOnLiner(pointId) {
     var $tick = $('#player a.tick.item').removeClass('active')
         .filter('[href="#' + pointId + '"]').addClass('active');
     var left = $tick.position().left - $tick.parent().position().left;
     var $scroller = $tick.parents('.scroll-wrapper:first');
+
+    // animate
     $scroller.animate({
         scrollLeft: left/2
     });
+}
+function highlightPointOnMap(pointObj) {
+}
+
+function showContent(pointId) {
+    var pointObj = getPointObj(pointId);
+
+    // tab
+    highlightContentTab(pointObj);
+
+    // highlight liner
+    highlightPointOnLiner(pointId);
+
+    // highlight map
+    highlightPointOnMap(pointObj);
 }
 
 function handlePointLinkClick() {
