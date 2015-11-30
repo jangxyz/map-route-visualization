@@ -440,15 +440,12 @@ body {
                                 2시간 전에 불암산 정상에 있을 때는 그나마 사진을 찍더니, 이제는 신경쓰지 않습니다.
                                 산행 시작한지 3시간이 다 되어가 배가 고픕니다. 주섬주섬 간단한 간식들을 꺼내 먹습니다.
                             </p>
-                             
-                            <p>
-                                이때 뒷그룹은 치마바위 부근이라고 합니다.
-                            </p>
+                            <p> 이때 뒷그룹은 치마바위 부근이라고 합니다.  </p>
                         </div>
                     </div>
 
                     <div class="scroll-wrapper" style="width: 100%; overflow-x: scroll;">
-                        <ul class="ui tiny images horizontal list" style="width: 3000px; margin-left: 0; list-style-type: none;">
+                        <ul class="ui tiny images thumbnails horizontal list" style="width: 3000px; margin-left: 0; list-style-type: none;">
                             <li class="item">
                                 <a>
                                     <img class="ui rounded image" src="./images/thumbnails/256/IMG_6074.jpg.thumbnail-256.jpg"></a></li>
@@ -471,12 +468,15 @@ body {
             $('#sidebar .tabular.menu .item').tab();
         </script>
         <style>
-            #sidebar-content-tab .ul.images li {
+            #sidebar-content-tab ul.thumbnails.images li {
                 margin-left: 0;
             }
-            #sidebar-content-tab .ul.images li a {
-                display: inline-block;
-            }
+                #sidebar-content-tab ul.thumbnails.list li:before {
+                    content: "";
+                }
+                #sidebar-content-tab ul.thumbnails.images li a {
+                    display: inline-block;
+                }
         </style>
     </div>
     <div class="sidebar-button positioner">
@@ -542,6 +542,16 @@ function iframifyImage($img) {
     }
 }
 
+
+function imageThumbnailSrc(imgSrc, size) {
+	// http://cfile262.uf.daum.net/image/256F13445653D2670315A8
+	// http://t1.daumcdn.net/thumb/W200x200/?fname=http://cfile256.uf.daum.net/image/225E7F4D56552D0B031FBC
+	var sizePath = 'W' + size + 'x' + size;
+	var path = 'http://t1.daumcdn.net/thumb/' + sizePath;
+	path += '/?fname=' + encodeURIComponent(imgSrc);
+	return path;
+}
+
 function fillContentTab(pointObj) {
     var $el = $('#sidebar-content-tab');
     $el.find('.id').text(pointObj.id);
@@ -569,9 +579,13 @@ function fillContentTab(pointObj) {
 
     $el.find('.image').empty()
     if ((pointObj.figures||[])[0]) {
-        var $img = $('<img />').attr('src', pointObj.figures[0].src);
-        var iframedImg = iframifyImage($img);
-        $el.find('.image')[0].innerHTML = iframedImg;
+		var imgSrc = pointObj.figures[0].src;
+		// 200x200
+		imgSrc = imageThumbnailSrc(imgSrc, 200);
+        var $img = $('<img />').attr('src', imgSrc);
+        //var iframedImg = iframifyImage($img);
+        //$el.find('.image')[0].innerHTML = iframedImg;
+		$el.find('.image').append($img);
     }
 
     var description = pointObj.description.trim().split('\n').map(function(p) {
@@ -579,6 +593,7 @@ function fillContentTab(pointObj) {
     });
     $el.find('.description').empty().append(description);
 
+    // thumbnail images
     var $figureLis = (pointObj.figures||[]).map(function(figureObj) {
         var $img = $('<img />').attr({
             src: figureObj.src,
@@ -587,11 +602,27 @@ function fillContentTab(pointObj) {
             'style': figureObj.style,
         });
 
+		//var thumbnailImg = iframifyImage($img);
+		var thumbnailImg = imageThumbnailSrc($img.attr('src'), 100);
         return $('<li class="item">').append(
-            $('<a />').append(iframifyImage($img))
+				$('<a />').append($('<img />').attr('src', thumbnailImg)).addClass('ui rounded bordered image')
         );
     });
-    //$el.find('ul.images').empty().append($figureLis);
+    var $imageList = $el.find('ul.images');
+    $imageList.empty();
+
+    if ($figureLis > 1) {
+        $imageList.css('width', '3000px')
+            .append($figureLis);
+
+        // update width
+        var newWidth = 0;
+        var $firstItem = $imageList.find('img:first'),
+            $lastItem  = $imageList.find('img:last');
+        newWidth = $lastItem.offset().left + $lastItem.width() - $firstItem.offset().left;
+
+        $imageList.css('width', newWidth + 20);
+    }
 }
 
 function getCurrentPointId() {
